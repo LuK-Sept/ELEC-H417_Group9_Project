@@ -1,10 +1,3 @@
-
-
-
-
-
-
-
 import random
 import socket
 import threading
@@ -68,24 +61,21 @@ class Client(threading.Thread):
             try:
                 connection, client_address = self.sock.accept()
                 
-                connected_node_id = connection.recv(4096).decode("utf-8") #routine très importante d'échange de clées (ici en reception)
-                connection.send(self.host.encode("utf-8"))
+                connected_node_id = connection.recv(4096).decode("utf-8")   #get the ip of the node connected
+                connection.send(self.host.encode("utf-8"))                  #send my ip
 
-                pub_key = connection.recv(4096)
-                pub_key = RSA.import_key(pub_key)
+                pub_key = connection.recv(4096)                             #get the public key of the node connected
+                pub_key = RSA.import_key(pub_key)                           #import the public key
 
                 cipher = PKCS1_OAEP.new(pub_key)
-                data = cipher.encrypt(self.key)
+                data = cipher.encrypt(self.key)                             #encrypt my key with the public key of the node connected                                 
 
 
-                connection.send(data)
-                other_key = connection.recv(4096)
+                connection.send(data)                                       #send my key encrypted                                 
+                other_key = connection.recv(4096)                           #get the key of the node connected encrypted with my symetric key 
                 f = Fernet(self.key)
-                other_key = f.decrypt(other_key)
+                other_key = f.decrypt(other_key)                            #decrypt the key of the node connected with my symetric key
 
-
-                #print("debug",end=" ")
-                #print(self.host,connected_node_id)
                 if self.host != connected_node_id:
                     thread_client = self.create_new_connection(
                         connection,
@@ -95,8 +85,6 @@ class Client(threading.Thread):
                         other_key
                     )
                     
-                    
-
                 else:
                     connection.close()
 
@@ -133,7 +121,7 @@ class Client(threading.Thread):
 
         for node in self.nodes_connected:
             if node.host == host:
-                #print("[connect_to]: Already connected with this node.")
+                                    # Already connected with this node.")
                 return True
 
         try:
@@ -142,28 +130,26 @@ class Client(threading.Thread):
                 print("connecting to %s port %s" % (host, port))
             sock.connect((host, port))
 
-            sock.send(self.host.encode("utf-8"))				#routine très importante d'échange de clées (ici en envoie)
-            connected_node_id = sock.recv(1024).decode("utf-8")
+            sock.send(self.host.encode("utf-8"))				    #send my ip
+            connected_node_id = sock.recv(1024).decode("utf-8")     #get the ip of the node connected
 
-            sock.send(self.pub_key.exportKey("PEM"))
-            cipher_key = sock.recv(4096)
+            sock.send(self.pub_key.exportKey("PEM"))                #send my public key
+            cipher_key = sock.recv(4096)                            #get the key of the node connected encrypted with my public key
             cipher = PKCS1_OAEP.new(self.pr_key)
-            key = cipher.decrypt(cipher_key)
+            key = cipher.decrypt(cipher_key)                        #decrypt the key of the node connected with my private key
+
             f = Fernet(key)
             my_key = f.encrypt(self.key)
-            sock.send(my_key)
-
-
+            sock.send(my_key)                                       #send my key encrypted with the symetric key of the node connected
 
 
             if self.host == connected_node_id:
                 if self.verbose:
-                    print("Possible own ip: " + host)
-                self.banned.append(host)
+                    print("Possible own ip: " + host) #security but should never happen
                 sock.close()
                 return False
 
-            thread_client = self.create_new_connection(
+            thread_client = self.create_new_connection(     #create thread for the connection
                 sock, connected_node_id, host, port,key
             )
             
@@ -180,9 +166,9 @@ class Client(threading.Thread):
     def create_new_connection(self, sock, connected_node_id, host, port,key=""):
         thread_client = NodeConnection(self, sock, connected_node_id, host, port,key)
         thread_client.start()
-        self.nodes_connected.append(thread_client)
-        self.node_connected(thread_client)
-        self.peers.append([connected_node_id,key])
+        self.nodes_connected.append(thread_client)  #add the thread to the list of connected nodes
+        self.node_connected(thread_client)          
+        self.peers.append([connected_node_id,key])  #add the new peers to the list of peers 
        
 
         
@@ -191,10 +177,8 @@ class Client(threading.Thread):
     def node_connected(self, node):
         if self.verbose:
             print("node_connected: " + node.id)
-        return True
-        if node.host not in self.peers:
-            self.peers.append([node.host,""])
-        #self.send_peers()
+        
+
         
 
     def node_disconnected(self, node):
@@ -204,45 +188,55 @@ class Client(threading.Thread):
             self.peers.remove(node.host)
 
     def send_message(self, data, reciever):
-        for i in self.nodes_connected:
+        for i in self.nodes_connected: #simply send a message to a node by fiding is ip in the list of connected nodes
             if i.host == reciever:
                 i.send("MSG",data)
     
     def send_tor(self, data, reciever):
+        #send a tor message to a node
         data = bytes(data,"utf-8")
         
         peers = self.peers.copy()
         path = []
-        for node in peers:
+
+        for node in peers:          #find the receiver in the list of peers
             if node[0] == reciever:
                 receiver = node
                 peers.remove(node)
-        for j in range(3):
+
+        for j in range(3):          #create a random path
             path.append(peers.pop(random.randint(0,len(peers)-1)))
-        path.append(receiver)
+
+        path.append(receiver)       #add the receiver to the path
         
         data = packet_builder("MSG",path[len(path)-2][0],path[len(path)-1][0],data).bytes
+                                    #build the final packet
         
-        
-        packet = tor_builder(self.host,path,data)
+        packet = tor_builder(self.host,path,data) #build the tor packet with the onion routing
         for i in self.nodes_connected:
             if i.host == path[0][0]:
-                i.send("TOR",packet)
+                i.send("TOR",packet)#send the tor packet to the first node of the path
+
+    def get_path(self):# return a random path (dont use in send_tor because)
+        peers = self.peers.copy()
+        path = []
+        for j in range(3):
+            path.append(peers.pop(random.randint(0,len(peers)-1)))
+        return path
 
     def request_http(self, target):
             
         data = bytes(target,"utf-8")
         
-        peers = self.peers.copy()
-        path = []
-        for j in range(3):
-            path.append(peers.pop(random.randint(0,len(peers)-1)))
         
+        path = self.get_path()      #get a random path
         
         data = packet_builder("HTTP",path[len(path)-2][0],path[len(path)-1][0],data).bytes
-        
+                                    #build the final packet
         
         packet = tor_builder(self.host,path,data)
+                                    #build the tor packet with the onion routing
+
         for i in self.nodes_connected:
             if i.host == path[0][0]:
 
@@ -251,20 +245,70 @@ class Client(threading.Thread):
                 
                 try:
                     
-                    ans = get_ACK(self.host)
+                    ans = get_ACK(self.host)        #wait for the answer
                     if ans == b'':
                         raise Exception("No answer")
-                    packet = packet_debuilder(ans)
-                    f = Fernet(path[0][1])
-                    html = f.decrypt(packet["data"].bytes)
-                    f = Fernet(path[1][1])
-                    html = f.decrypt(html)
-                    f = Fernet(path[2][1])
-                    html = f.decrypt(html)
-                    html = html.decode("utf-8")
+
+
+                    html = tor_debuilder(packet,path,ans)
+
+
+
                     return html
+
                 except Exception as e:
                     print(e)
                     print("Error in request_http")
                     raise e 
 
+
+
+    def send_challenge(self,password):
+        
+    
+
+        chal = random.getrandbits(16)                       #create a random challenge on 16 bits
+
+        chal = BitArray(uint=chal, length=16)
+        print(chal.bytes)
+
+        cypher = abs(hash(str_to_bin(password) + chal.bin)) #get the hash of the password and the challenge
+
+        data = chal+BitArray(uint=cypher, length=64)        #build the data to send
+
+
+        
+        
+        
+        path = self.get_path()
+        
+        data = packet_builder("CHAL",path[len(path)-2][0],path[len(path)-1][0],data).bytes
+                                                            #build the final packet
+        packet = tor_builder(self.host,path,data)           #build the tor packet with the onion routing
+
+        for i in self.nodes_connected:
+            if i.host == path[0][0]:
+                i.send("TOR",packet)                        #send the tor packet to the first node of the path
+        
+        
+
+        ans = get_ACK(self.host)                            #wait for the answer
+        
+
+       
+        data = tor_debuilder(packet,path,ans)               #debuild the tor packet
+        
+
+
+        print("ANSWER :",data)
+
+        return data
+        
+            
+            
+
+
+
+
+    
+    

@@ -1,10 +1,6 @@
-
 import time
-from validators import url
-
-
+from challenge import Challenge
 from packet import *
-
 from client import Client
 
 
@@ -176,11 +172,11 @@ def tor_http(nodes):
     if example == "y":
         raw = "https://www.w3schools.com/python/demopage.htm"
     else:
-        raw = ''
+        raw = input(prefix +"Enter a valide url : ")
 
 
     
-    raw = input(prefix +"Enter a valide url")
+    
 
     sender_ip = raw_ip
 
@@ -198,11 +194,61 @@ def tor_http(nodes):
     return nodes
 
 
+def challenge(nodes):
+    
+        
+    prefix = "Challenge "
+
+    raw_ip = ""
+    while(not is_valide_ip(raw_ip,nodes)):
+        raw_ip = input(prefix +"Enter a valide ip adress for the sender of this form 127.0.0.x with 0<x<=n : ")
+    
+    sender_ip = raw_ip
+
+    password = input(prefix +"Enter the password you want to initialize the server with : ")
+
+
+
+    chal = Challenge("127.0.1.1",password)
+    chal.start()
+    time.sleep(1) # make sure the thread is fully started
+    
+    password = input(prefix +"Enter the password that you want to use to connect to server : ")
+    
+    
+    for node in nodes:
+        if node.host == sender_ip:
+            node.send_challenge(password)
+            
+            break                    
+    chal.stop()
+    
+        
+    
+        
+    return nodes
 
 def stop_nodes(nodes):
     print("Stopping nodes...")
     for node in nodes:
         node.stop()
+    return nodes
+
+
+def help(nodes):
+    print(
+    """\033[94m
+start : start the nodes
+message : send a message from a node to another
+add_client : add a client to the network
+TOR_message : send a message from a node to another using TOR
+TOR_http : send a http request from a node to another using TOR
+challenge : send a challenge from a node to another
+stop : stop the nodes
+help : print this message
+exit : exit the program \033[0m
+""")
+
     return nodes
 
 
@@ -220,7 +266,10 @@ key_word = {
     "add_client":add_client,
     "TOR_message":tor_message,
     "TOR_http":tor_http,
+    "challenge":challenge,
+    "help":help,
     "stop":stop_nodes
+
 }
 
 
@@ -228,7 +277,7 @@ key_word = {
 
 
 print("We recommend to use 10 peers or less for a better experience")
-n = 5#int(input("Number of peers: "))
+n = int(input("Number of peers: "))
 while(n < 2 or n > 254):
     n = int(input("Number of peers between 2 and 254: "))
 
@@ -236,21 +285,8 @@ while(n < 2 or n > 254):
 nodes = start_nodes(n)
 
 
-#nodes[0].send_message("Message from me","127.0.0.3")
-#nodes[0].send_tor("Hello from me","127.0.0.3")
 
-#
-print('\033[93m'+"HTML REQUEST : "+ '\033[0m')
-
-
-html = nodes[0].request_http("https://www.w3schools.com/python/demopage.htm")
-print(html)
-
-print('\033[93m'+"End of HTML REQUEST"+ '\033[0m')
-# n+=1
-# sup = Client("127.0.0."+str(n),5000,verbose=True)
-# sup.start()
-# sup.connect_to("127.0.0.1")
+nodes = help(nodes)
 
 
 
@@ -258,13 +294,16 @@ while(True):
     key = input("Enter a command: ")
     try:
         nodes = key_word[key](nodes)
+        
         if key == "stop":
             break
-    except KeyError:
+    except Exception as e:
+        print(e)
         print("Command not found")
 
 
 
-#sup.stop()
+print("Exiting program...")
+time.sleep(1)
 
 

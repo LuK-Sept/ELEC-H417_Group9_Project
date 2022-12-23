@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import socket
 import threading
 import time
@@ -53,8 +47,8 @@ class NodeConnection(threading.Thread):
         self.sock = sock
         self.terminate_flag = threading.Event()
         self.last_ping = time.time()
-        # Variable for parsing the incoming json messages
-        self.buffer = ""
+        
+        
 
         # The id of the connected node
         self.key = key
@@ -74,25 +68,26 @@ class NodeConnection(threading.Thread):
 
 
     def stop(self):
+        #stop the thread
         self.terminate_flag.set()
 
     def run(self):
         self.sock.settimeout(20.0)
 
         while not self.terminate_flag.is_set():
-            if time.time() - self.last_ping > self.main_node.dead_time:
+            if time.time() - self.last_ping > self.main_node.dead_time: # if the node is dead
                 self.terminate_flag.set()
                 if self.main_node.verbose:
                     print("node" + self.id + "is dead")
-                    for peer in self.main_node.peers:
-                        if peer[0] == self.id:
-                            self.main_node.peers.remove(peer)
-                            break
+                for peer in self.main_node.peers:
+                    if peer[0] == self.id:
+                        self.main_node.peers.remove(peer)
+                        break
 
             line = ""
 
             try:
-                line = self.sock.recv(4096)
+                line = self.sock.recv(4096) #wait for a packet
 
             except socket.timeout:
             
@@ -106,13 +101,12 @@ class NodeConnection(threading.Thread):
                     )
                     print(e)
 
-            if line != b'':
+            if line != b'': #if we have a packet
                 
-                if not is_valide_packet(line):
+                if not is_valide_packet(line):  # if the packet as a valid size 
                     continue
-                self.last_ping = time.time()
-                # if self.main_node.verbose:
-                #     print("[" +self.main_node.host,end="] ")
+                self.last_ping = time.time()    #update the last ping time
+                
                 
 
 
@@ -129,88 +123,96 @@ class NodeConnection(threading.Thread):
                     continue
                 
                 
-                if packet["Type"] == "PING":
+                if packet["Type"] == "PING":    #if the packet is a ping
                     
-                    # if self.main_node.verbose:
-                        
-                    #     print("PING from " + packet["ip_source"] )
                     try:
-                        peers = bnr_to_peers(packet["data"])
-                        # for peer in peers:
-                        #     print("[" +self.main_node.host +"] "+"NEW PEERS INCOMING",peer[0])
-
-                        self.find_new_peers(peers)
+                        peers = bnr_to_peers(packet["data"])    #get the peers from the packet
+                        
+                        self.find_new_peers(peers)              #add the new peers to the list of discovered peers
                     except:
                         pass
 
                     
-                if packet["Type"] == "MSG":
+                if packet["Type"] == "MSG":                     #if the packet is a message
                     print(self.main_node.host+" MSG from " + packet["ip_source"] + " : " + packet["data"])
+                                                                #print the message
                 
-                if packet["Type"] == "TOR":
+                if packet["Type"] == "TOR":                     #if the packet is a TOR packet
                     print("TOR RECEIVED BY : ",self.main_node.host)
                     print("ttl : ",packet["ttl"])
 
 
                     data = packet["data"]
-                    f = Fernet(self.main_node.key)
+                    f = Fernet(self.main_node.key)              
                     
-                    data = f.decrypt(packet["data"].bytes)
-                    if packet["ttl"] > 0:
+                    data = f.decrypt(packet["data"].bytes)      #decrypt the packet
+                    if packet["ttl"] > 0:                       #check if i am the exit point of the TOR
 
                         onion =  packet_debuilder(data)
                         destination_ip = onion["ip_destination"]
 
                         for node in self.main_node.nodes_connected:
                             if node.host == destination_ip:
-                                node.send("TOR",data)
+                                node.send("TOR",data)           #send the packet to the next node
                                 
 
-                                raw = get_ACK(self.main_node.host)
+                                raw = get_ACK(self.main_node.host)  #wait for an answer if there is one
                                 if raw == b'':
                                     continue
-                                ans = packet_debuilder(raw)
+                                ans = packet_debuilder(raw)         #decrypt the answer
                                 if ans == b'':
                                     continue
                                 
-                                if ans["Type"] == "ACK":
+                                if ans["Type"] == "ACK":            #if the answer is an ACK
                                     print("ACK RECEIVED BY : ",self.main_node.host)
                                     
                                     
                                     answer = create_cipher_packet("ACK",self.main_node.host,packet["ip_source"],ans["data"].bytes,self.main_node.key)
-                                    # print("SENDING ANSWER TO : ",packet["ip_source"])
-                                    # print("USING KEY : ",self.main_node.key)
+                                                                    #create the ACK packet encrypted with the key of the node
 
 
-                                    send_ACK( packet["ip_source"],(answer.bytes))
+                                    send_ACK( packet["ip_source"],(answer.bytes))   #send the ACK packet
                                     
                                 
-                    else:
+                    else:                                #if i am the exit point
                         onion =  packet_debuilder(data)
-                        if onion["Type"] == "HTTP":
-                            x = requests.get(onion["data"])
+                        if onion["Type"] == "HTTP":      #if the packet is a HTTP request
+                            x = requests.get(onion["data"]) #send the request
 
-                            # print(x.text)
+                            
                             
                             
                             answer = create_cipher_packet("ACK",self.main_node.host,onion["ip_source"],x.text.encode("utf-8"),self.main_node.key)
+                            #create the ACK packet encrypted with the key of the node containing the answer
                             if answer == b'':
                                 continue
-                            # print("SENDING ANSWER TO : ",onion["ip_source"])
-                            # print("IP OF MY NODE : ",self.host)
-                            # print("USING KEY : ",self.main_node.key)
+                            
                             
 
                             
                             send_ACK( onion["ip_source"],(answer.bytes))
-                            
+                            #send the ACK packet
                             
                             continue
+                        elif onion["Type"] == "CHAL":   #if the packet is a challenge
 
+                            #create a socket and connect to the challenge server
+                            s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+                            s.connect(("127.0.1.1",6000))
+                            s.send(onion["data"].bytes) #send the challenge 
+                            challenge = s.recv(4096)
+                            #get the answer from the challenge server
+                            s.close()
+                            answer = create_cipher_packet("ACK",self.main_node.host,onion["ip_source"],challenge,self.main_node.key)
 
-                        for node in self.main_node.nodes_connected:
+                            send_ACK( onion["ip_source"],(answer.bytes))
+                            #send the ACK packet containing the answer
+                            continue
+                            
+
+                        for node in self.main_node.nodes_connected: #send the packet to the next node if not of that type just send it
                             if node.host == onion["ip_destination"]:
-                                # print("MA DATA : ",type(onion["data"]))
+                                
                                 node.send(onion["Type"],data)
                                 
                         
@@ -226,33 +228,29 @@ class NodeConnection(threading.Thread):
         time.sleep(1)
 
     def send(self,Type,data="NONE"):
-        data = data 
-        # self.sock.sendall(data.encode("utf-8"))
-        if type(data) == bytes:
+       
+        
+        if type(data) == bytes: #if the data is already a bytes object
                 self.sock.sendall(data)
         else:
-            if Type == "TOR":
-                self.sock.sendall(data.bytes)
+            if Type == "TOR":   #if the packet is a TOR packet
+                self.sock.sendall(data.bytes)   #send the packet
                 
-            else:
+            else:            #if the packet is not a TOR packet create the packet and send it
                 self.sock.sendall(packet_builder(Type,self.main_node.host,self.host,data).bytes)
         
 
     def find_new_peers(self,peers):
+
         new_peers = []
-        for peer in peers:
+        for peer in peers: #peers is the list of peers received from the ping packet
             for node in self.main_node.nodes_connected:
-                if peer == node.host:
+                if peer == node.host:   #if the peer is already connected
                     break
-                if peer == self.main_node.host:
+                if peer == self.main_node.host:     #if the peer is the current node
                     break
-                if len(self.main_node.try_to_connect) >= 10:
+                if len(self.main_node.try_to_connect) >= 10:    #if the list of peers to connect is full
                     break
-                self.main_node.try_to_connect.add(peer)
+                self.main_node.try_to_connect.add(peer)       #else add the peer to the list of peers to connect
 
-        
-                #self.main_node.peers.append(peer)
-        
-
-        # self.last_ping = time.time()# to compensate the time to connect to new peers
     
