@@ -1,9 +1,7 @@
 # User notice for Peer to Peer TOR network
 
 ## Installation
-#
-#
-#
+
 ```
 pip install -r requirements.txt
 ```
