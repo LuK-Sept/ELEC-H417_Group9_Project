@@ -31,6 +31,6 @@ send a http request from a node to another using TOR
 - **challenge**
 send a challenge from a node to another
 - **stop**
-stop the nodes
+stop the nodes and exit the program
 
 
