@@ -245,8 +245,7 @@ TOR_message : send a message from a node to another using TOR
 TOR_http : send a http request from a node to another using TOR
 challenge : send a challenge from a node to another
 stop : stop the nodes
-help : print this message
-exit : exit the program \033[0m
+help : print this message \033[0m
 """)
 
     return nodes
