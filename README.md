@@ -8,7 +8,7 @@ pip install -r requirements.txt
 
 To start :
 ```sh
-python3 p2p.py
+python3 main.py
 ```
 
 You are asked for a number of peers.
