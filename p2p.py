@@ -278,7 +278,7 @@ key_word = {
 
 print("We recommend to use 10 peers or less for a better experience")
 n = int(input("Number of peers: "))
-while(n < 2 or n > 254):
+while(n < 4 or n > 254):
     n = int(input("Number of peers between 2 and 254: "))
 
 
